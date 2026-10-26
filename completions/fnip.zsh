@@ -17,8 +17,10 @@ _fnip() {
         '-d:render without running' '--dry:render without running'
         '-e:run'                   '-x:run'  '--exec:run'
         '-h:help'                  '--help:help'
+        '-p:ask for the command'   '--prompt:ask for the command'
         '--setup:install completion' '--unsetup:remove completion'
         '--install:install fnip on PATH' '--uninstall:remove fnip from PATH'
+        '--json:print list or show as JSON'
         '--completions:print completion script'
     )
     names=("${(@f)$(fnip --complete-names 2>/dev/null)}")
@@ -32,7 +34,8 @@ _fnip() {
     fi
 
     case $first in
-        -a|--add|-l|--list|-h|--help|--setup|--unsetup|--install|--uninstall) return ;;
+        -a|--add) compadd -- -p --prompt; return ;;
+        -l|--list|-h|--help|--setup|--unsetup|--install|--uninstall) return ;;
         --completions) compadd bash zsh powershell; return ;;
         -*) pos=3 ;;   # fnip -r <name>
         *)  pos=2 ;;   # fnip <name> var=...

@@ -43,10 +43,12 @@ Run `fnip` or `fnip -h` to print this list in the terminal.
 |---|---|
 | `fnip -h`, `fnip --help` | print help |
 | `fnip -a <name> "<command>"` | save or overwrite a snippet |
-| `fnip -a <name>` | ask for the command; quotes you type are stored as-is |
-| `<text> \| fnip -a <name>` | same, reading the command from stdin |
+| `fnip -a <name> -p`, `fnip -a <name> --prompt` | ask for the command; quotes you type are stored as-is |
+| `<text> \| fnip -a <name>` | read the command from stdin |
 | `fnip -l`, `fnip --list` | list every snippet |
+| `fnip -l --json` | same list as a JSON array |
 | `fnip -s <name>`, `fnip --show <name>` | print the raw template |
+| `fnip -s <name> --json` | same template as one JSON object |
 | `fnip -d <name> [args]`, `fnip --dry` | print the rendered command, do not run it |
 | `fnip -e <name> [args]`, `fnip -x`, `fnip --exec` | run a snippet |
 | `fnip <name> [args]` | same as `fnip --exec <name> [args]` |
@@ -65,10 +67,10 @@ A short command can be the next argument. In bash and zsh, use single quotes so 
 fnip -a gp 'git add -A && git commit -m "{{msg}}" && git push'
 ```
 
-`fnip -a <name>` with no command prompts for one line. `'` and `"` are stored as typed:
+`fnip -a bunhash -p` asks for one line. `--prompt` is the same flag. `'` and `"` are stored as typed:
 
 ```text
-fnip -a bunhash
+fnip -a bunhash -p
 command for bunhash: bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
 saved: bunhash
 ```
@@ -93,7 +95,9 @@ EOF
 
 ```bash
 fnip -l
+fnip -l --json
 fnip -s gp
+fnip -s gp --json
 fnip -d gp msg="fix login"
 # git add -A && git commit -m "fix login" && git push
 
@@ -101,6 +105,18 @@ fnip gp msg="fix login"          # runs it
 fnip --exec gp msg="fix login"   # same thing
 fnip -r gp
 ```
+
+`--json` can sit anywhere in the command. `-l` prints an array, `-s` prints one object:
+
+```json
+[{"name":"gp","command":"git add -A && git commit -m \"{{msg}}\" && git push"}]
+```
+
+```json
+{"name":"gp","command":"git add -A && git commit -m \"{{msg}}\" && git push"}
+```
+
+`-p` and `--prompt` also can sit anywhere, and only with `--add`. `fnip -p` alone is an error.
 
 ### Install and completion
 

@@ -1,9 +1,9 @@
 // fnip - command snippet manager (Windows, Linux, macOS)
 //
-//   fnip -a, --add <name> "<command>"   or pipe the raw command on stdin
+//   fnip -a, --add <name> "<command>"   or pipe it; -p/--prompt asks in the terminal
 //   fnip -r, --remove <name>
-//   fnip -l, --list
-//   fnip -s, --show <name>               raw template
+//   fnip -l, --list [--json]
+//   fnip -s, --show <name> [--json]      raw template
 //   fnip -d, --dry <name> [args]         render without running
 //   fnip -e, -x, --exec <name> [args]    run (or just: fnip <name> [args])
 //   fnip --setup | --unsetup             install/remove shell completion
@@ -739,10 +739,10 @@ fn usage() {
         r#"fnip - command snippets
 
   fnip -a, --add <name> "<command>"   create/overwrite
-  fnip -a, --add <name>                ask for the command (quotes are kept)
+  fnip -a, --add <name> -p, --prompt   ask for the command (quotes are kept)
   fnip -r, --remove <name>            remove
-  fnip -l, --list                     list all
-  fnip -s, --show <name>              show the raw template
+  fnip -l, --list [--json]            list all
+  fnip -s, --show <name> [--json]     show the raw template
   fnip -d, --dry <name> [args]        render without running
   fnip -e, -x, --exec <name> [args]   run (or just: fnip <name> [args])
   fnip --install                      copy fnip onto PATH and install completion
@@ -819,14 +819,60 @@ fn exec_snippet(store: &Store, name: &str, args: &[String], dry: bool) -> Result
     Ok(run(&line))
 }
 
+#[derive(Serialize)]
+struct Listed<'a> {
+    name: &'a str,
+    command: &'a str,
+}
+
+fn write_json(value: &impl Serialize) -> Result<(), String> {
+    let text = serde_json::to_string(value).map_err(|e| e.to_string())?;
+    println!("{text}");
+    Ok(())
+}
+
+struct ParsedArgs {
+    json: bool,
+    prompt: bool,
+    args: Vec<String>,
+}
+
+/// --json, -p and --prompt may sit anywhere. They are not snippet names.
+fn parse_global_flags(args: Vec<String>) -> ParsedArgs {
+    let mut json = false;
+    let mut prompt = false;
+    let mut kept = Vec::new();
+    for arg in args {
+        match arg.as_str() {
+            "--json" => json = true,
+            "-p" | "--prompt" => prompt = true,
+            _ => kept.push(arg),
+        }
+    }
+    ParsedArgs { json, prompt, args: kept }
+}
+
 fn real_main() -> Result<i32, String> {
     migrate_legacy_config();
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let parsed = parse_global_flags(std::env::args().skip(1).collect());
+    let args = parsed.args;
     let Some(action) = args.first().map(String::as_str) else {
+        if parsed.prompt {
+            return Err("-p/--prompt only works with --add".into());
+        }
+        if parsed.json {
+            return Err("--json only works with --list and --show".into());
+        }
         usage();
         return Ok(0);
     };
     let rest = &args[1..];
+    if parsed.json && !matches!(action, "-l" | "--list" | "-s" | "--show") {
+        return Err("--json only works with --list and --show".into());
+    }
+    if parsed.prompt && !matches!(action, "-a" | "--add") {
+        return Err("-p/--prompt only works with --add".into());
+    }
 
     // these don't depend on snippets.json: they work even if the file is corrupted
     match action {
@@ -882,12 +928,25 @@ fn real_main() -> Result<i32, String> {
                 if rest.len() > 2 {
                     return Err("usage: fnip --add <name>".into());
                 }
-                if io::stdin().is_terminal() {
+                if parsed.prompt {
+                    if !io::stdin().is_terminal() {
+                        return Err("-p/--prompt needs a terminal".into());
+                    }
                     read_command_prompt(name)?
-                } else {
+                } else if !io::stdin().is_terminal() {
                     read_command_stdin()?
+                } else {
+                    return Err(
+                        r#"usage: fnip --add <name> "<command>"
+       fnip --add <name> -p
+       <command> | fnip --add <name>"#
+                            .into(),
+                    );
                 }
             } else {
+                if parsed.prompt {
+                    return Err("pass a command or use -p/--prompt, not both".into());
+                }
                 rest[1..].join(" ")
             };
             store.insert(name.clone(), Snippet { command });
@@ -907,8 +966,19 @@ fn real_main() -> Result<i32, String> {
             Ok(0)
         }
         "-l" | "--list" => {
-            for (name, sn) in &store {
-                println!("{:<16} {}", name, sn.command);
+            if parsed.json {
+                let items: Vec<Listed> = store
+                    .iter()
+                    .map(|(name, sn)| Listed {
+                        name,
+                        command: &sn.command,
+                    })
+                    .collect();
+                write_json(&items)?;
+            } else {
+                for (name, sn) in &store {
+                    println!("{:<16} {}", name, sn.command);
+                }
             }
             Ok(0)
         }
@@ -919,7 +989,14 @@ fn real_main() -> Result<i32, String> {
             let sn = store
                 .get(&rest[0])
                 .ok_or_else(|| format!("no such snippet: {}", rest[0]))?;
-            println!("{}", sn.command);
+            if parsed.json {
+                write_json(&Listed {
+                    name: &rest[0],
+                    command: &sn.command,
+                })?;
+            } else {
+                println!("{}", sn.command);
+            }
             Ok(0)
         }
         "-d" | "--dry" | "-e" | "-x" | "--exec" => {

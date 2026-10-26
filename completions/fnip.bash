@@ -3,7 +3,7 @@
 
 _fnip_complete() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local flags="-a -r -l -s -d -e -x -h --add --remove --list --show --dry --exec --help --setup --unsetup --install --uninstall --completions"
+    local flags="-a -r -l -s -d -e -x -h -p --add --remove --list --show --dry --exec --help --setup --unsetup --install --uninstall --completions --json --prompt"
     local first="${COMP_WORDS[1]}"
     local name pos
 
@@ -19,7 +19,8 @@ _fnip_complete() {
     fi
 
     case "$first" in
-        -a|--add|-l|--list|-h|--help|--setup|--unsetup|--install|--uninstall) return ;;   # nothing to complete after these
+        -a|--add) COMPREPLY=( $(compgen -W "-p --prompt" -- "$cur") ); return ;;
+        -l|--list|-h|--help|--setup|--unsetup|--install|--uninstall) return ;;   # nothing to complete after these
         --completions) COMPREPLY=( $(compgen -W "bash zsh powershell" -- "$cur") ); return ;;
         -*) pos=2 ;;                              # fnip -r <name>
         *)  pos=1 ;;                              # fnip <name> var=...

@@ -18,7 +18,8 @@ Register-ArgumentCompleter -Native -CommandName fnip -ScriptBlock {
 
     $flags = '-a','-r','-l','-s','-d','-e','-x','-h',
              '--add','--remove','--list','--show','--dry','--exec','--help',
-             '--setup','--unsetup','--install','--uninstall','--completions'
+             '--setup','--unsetup','--install','--uninstall','--completions',
+             '--json','-p','--prompt'
 
     if ($pos -eq 1) {
         & $emit ($flags + @(fnip --complete-names 2>$null))
@@ -26,7 +27,8 @@ Register-ArgumentCompleter -Native -CommandName fnip -ScriptBlock {
     }
 
     $first = $elements[1]
-    if ($first -in '-a','--add','-l','--list','-h','--help','--setup','--unsetup','--install','--uninstall') { return }
+    if ($first -in '-a','--add') { & $emit @('-p','--prompt'); return }
+    if ($first -in '-l','--list','-h','--help','--setup','--unsetup','--install','--uninstall') { return }
     if ($first -eq '--completions') { & $emit @('bash','zsh','powershell'); return }
 
     $namePos = if ($first.StartsWith('-')) { 2 } else { 1 }
