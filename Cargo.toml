@@ -1,0 +1,22 @@
+[package]
+name = "fnip"                 # project/crate name
+version = "0.1.0"
+edition = "2021"
+description = "Command snippets with variables for your terminal (Windows, Linux, macOS)"
+license = "MIT"
+repository = "https://github.com/Habbora/fnip"
+
+[[bin]]
+name = "fnip"                 # name of the executable you type in the terminal
+path = "src/main.rs"
+
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+
+[profile.release]
+opt-level = "z"   # optimize for size
+lto = true        # cross-crate optimization
+strip = true      # strip debug symbols

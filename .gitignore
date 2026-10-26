@@ -1,0 +1,12 @@
+# Rust
+/target
+**/*.rs.bk
+
+# fnip writes snippets.json.tmp beside the store, never in this repo,
+# but ignore a temp file if one is created here.
+*.tmp
+
+# OS and debugger junk
+.DS_Store
+Thumbs.db
+*.pdb
