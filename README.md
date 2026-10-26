@@ -80,6 +80,22 @@ fnip dk alpine sh
 
 Tip: in bash/zsh, create snippets with **single quotes**, so your shell doesn't expand `$VAR` before `fnip` receives the text. And test with `-d` before running.
 
+`fnip -a bunhash` asks for the command. What you type is stored as-is, including `'` and `"`. A pipe does the same when stdin is not a terminal:
+
+```powershell
+@'
+bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
+'@ | fnip -a bunhash
+```
+
+```bash
+fnip -a bunhash <<'EOF'
+bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
+EOF
+```
+
+`fnip -s bunhash` prints the stored text. `fnip -d bunhash senha=sua-senha` shows the line that would run.
+
 ## Tab completion
 
 On the **first run** in an interactive terminal, `fnip` asks whether you want to enable completion. Answer `Y` and it writes a line to your shell's startup file. **Open a new terminal** and Tab works for flags, snippet names and template variables (`ver=`).

@@ -1,6 +1,6 @@
 // fnip - command snippet manager (Windows, Linux, macOS)
 //
-//   fnip -a, --add <name> "<command with {{variables}}>"
+//   fnip -a, --add <name> "<command>"   or pipe the raw command on stdin
 //   fnip -r, --remove <name>
 //   fnip -l, --list
 //   fnip -s, --show <name>               raw template
@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{self, ErrorKind, IsTerminal, Write};
+use std::io::{self, ErrorKind, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::sync::OnceLock;
@@ -739,6 +739,7 @@ fn usage() {
         r#"fnip - command snippets
 
   fnip -a, --add <name> "<command>"   create/overwrite
+  fnip -a, --add <name>                ask for the command (quotes are kept)
   fnip -r, --remove <name>            remove
   fnip -l, --list                     list all
   fnip -s, --show <name>              show the raw template
@@ -753,6 +754,56 @@ fn usage() {
 Template: {{{{var}}}}  {{{{var:default}}}}  {{{{@}}}}
 Args:     key=value fills variables; the rest goes into {{{{@}}}}"#
     );
+}
+
+fn read_command_prompt(name: &str) -> Result<String, String> {
+    print!("command for {name}: ");
+    io::stdout().flush().map_err(|e| e.to_string())?;
+    let mut line = String::new();
+    io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+    let text = line.trim_end_matches(['\r', '\n']).to_string();
+    if text.is_empty() {
+        return Err("empty command".into());
+    }
+    Ok(text)
+}
+
+fn read_command_stdin() -> Result<String, String> {
+    let mut bytes = Vec::new();
+    io::stdin().read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    let text = decode_piped_text(&bytes)?;
+    let text = text.trim_end_matches(['\r', '\n']).to_string();
+    if text.is_empty() {
+        return Err("empty command".into());
+    }
+    Ok(text)
+}
+
+fn decode_piped_text(bytes: &[u8]) -> Result<String, String> {
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        return utf16_le_to_string(rest);
+    }
+    // Windows PowerShell 5.1 pipes text to a native program as UTF-16 LE.
+    if looks_like_utf16_le(bytes) {
+        return utf16_le_to_string(bytes);
+    }
+    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
+    String::from_utf8(bytes.to_vec()).map_err(|e| format!("command text is not utf-8: {e}"))
+}
+
+fn looks_like_utf16_le(bytes: &[u8]) -> bool {
+    bytes.len() >= 4 && bytes.len() % 2 == 0 && bytes.iter().skip(1).step_by(2).all(|b| *b == 0)
+}
+
+fn utf16_le_to_string(bytes: &[u8]) -> Result<String, String> {
+    if bytes.len() % 2 != 0 {
+        return Err("command text is not valid utf-16".into());
+    }
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    String::from_utf16(&units).map_err(|e| format!("command text is not valid utf-16: {e}"))
 }
 
 fn exec_snippet(store: &Store, name: &str, args: &[String], dry: bool) -> Result<i32, String> {
@@ -815,19 +866,31 @@ fn real_main() -> Result<i32, String> {
             Ok(0)
         }
         "-a" | "--add" => {
-            if rest.len() < 2 {
-                return Err(r#"usage: fnip --add <name> "<command>""#.into());
+            if rest.is_empty() {
+                return Err(
+                    r#"usage: fnip --add <name> "<command>"  or:  <command> | fnip --add <name>"#
+                        .into(),
+                );
             }
             let name = &rest[0];
             if name.starts_with('-') {
                 return Err("name cannot start with '-'".into());
             }
-            store.insert(
-                name.clone(),
-                Snippet {
-                    command: rest[1..].join(" "),
-                },
-            );
+            // A pipe bypasses the shell's quote rules. PowerShell 5.1 drops '"'
+            // from arguments of a native program; stdin still carries them.
+            let command = if rest.len() == 1 || rest.get(1).map(String::as_str) == Some("-") {
+                if rest.len() > 2 {
+                    return Err("usage: fnip --add <name>".into());
+                }
+                if io::stdin().is_terminal() {
+                    read_command_prompt(name)?
+                } else {
+                    read_command_stdin()?
+                }
+            } else {
+                rest[1..].join(" ")
+            };
+            store.insert(name.clone(), Snippet { command });
             save(&store)?;
             println!("saved: {name}");
             Ok(0)
