@@ -35,22 +35,86 @@ To just build: `cargo build --release` (output in `target/release/fnip`).
 | Linux | `~/.local/bin/fnip` | `~/.profile` and `~/.bashrc`, or `~/.zprofile` and `~/.zshrc` |
 | macOS | `~/.local/bin/fnip` | `~/.zprofile` and `~/.zshrc` (bash: `~/.bash_profile`) |
 
-## Usage
+## Commands
 
-| Short | Long | Action |
-|---|---|---|
-| `-a` | `--add <name> "<command>"` | create or overwrite a snippet |
-| `-r` | `--remove <name>` | remove |
-| `-l` | `--list` | list all |
-| `-s` | `--show <name>` | show the raw template |
-| `-d` | `--dry <name> [args]` | print the rendered command without running it |
-| `-e`, `-x` | `--exec <name> [args]` | run |
-| | `--install` / `--uninstall` | copy `fnip` onto `PATH` and install completion / remove both |
-| | `--setup` / `--unsetup` | install / remove shell completion only |
-| | `--completions <shell>` | print the completion script |
-| | `-h`, `--help` | help |
+Run `fnip` or `fnip -h` to print this list in the terminal.
 
-`fnip <name> [args]` is a shortcut for `fnip --exec <name> [args]`.
+| Command | What it does |
+|---|---|
+| `fnip -h`, `fnip --help` | print help |
+| `fnip -a <name> "<command>"` | save or overwrite a snippet |
+| `fnip -a <name>` | ask for the command; quotes you type are stored as-is |
+| `<text> \| fnip -a <name>` | same, reading the command from stdin |
+| `fnip -l`, `fnip --list` | list every snippet |
+| `fnip -s <name>`, `fnip --show <name>` | print the raw template |
+| `fnip -d <name> [args]`, `fnip --dry` | print the rendered command, do not run it |
+| `fnip -e <name> [args]`, `fnip -x`, `fnip --exec` | run a snippet |
+| `fnip <name> [args]` | same as `fnip --exec <name> [args]` |
+| `fnip -r <name>`, `fnip --remove <name>` | delete a snippet |
+| `fnip --install` | copy `fnip` onto `PATH` and install completion |
+| `fnip --uninstall` | remove the binary, the `PATH` entry and the completion |
+| `fnip --setup` | install shell completion only |
+| `fnip --unsetup` | remove shell completion only |
+| `fnip --completions <shell>` | print the completion script (`bash`, `zsh` or `powershell`) |
+
+### Save
+
+A short command can be the next argument. In bash and zsh, use single quotes so the shell does not expand `$VAR` before `fnip` sees it.
+
+```bash
+fnip -a gp 'git add -A && git commit -m "{{msg}}" && git push'
+```
+
+`fnip -a <name>` with no command prompts for one line. `'` and `"` are stored as typed:
+
+```text
+fnip -a bunhash
+command for bunhash: bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
+saved: bunhash
+```
+
+A pipe does the same when you are not at a prompt. PowerShell:
+
+```powershell
+@'
+bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
+'@ | fnip -a bunhash
+```
+
+bash and zsh:
+
+```bash
+fnip -a bunhash <<'EOF'
+bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
+EOF
+```
+
+### Look, run, delete
+
+```bash
+fnip -l
+fnip -s gp
+fnip -d gp msg="fix login"
+# git add -A && git commit -m "fix login" && git push
+
+fnip gp msg="fix login"          # runs it
+fnip --exec gp msg="fix login"   # same thing
+fnip -r gp
+```
+
+### Install and completion
+
+```bash
+fnip --install     # binary on PATH + completion
+fnip --uninstall   # removes both; snippets stay
+
+fnip --setup       # completion only
+fnip --unsetup     # remove completion only
+
+fnip --completions bash
+fnip --completions zsh
+fnip --completions powershell
+```
 
 ## Templates
 
@@ -62,50 +126,15 @@ To just build: `cargo build --release` (output in `target/release/fnip`).
 
 At run time, arguments in the form `key=value` fill the variables. Everything else becomes `{{@}}`. If the template has no `{{@}}` and there are leftovers, they are appended to the end of the command. Use `--` to force everything after it to be treated as extra.
 
-### Examples
-
 ```bash
-# required variable
-fnip -a gp 'git add -A && git commit -m "{{msg}}" && git push'
-fnip gp msg="fix login"
-
-# see what would run before running it
-fnip -d gp msg="fix login"
-# git add -A && git commit -m "fix login" && git push
-
-# appended extras
 fnip -a dk 'docker run -it --rm'
-fnip dk alpine sh
+fnip dk alpine sh          # appended, because the template has no {{@}}
+fnip dk -- alpine sh       # '--' forces the rest to be extra
 ```
-
-Tip: in bash/zsh, create snippets with **single quotes**, so your shell doesn't expand `$VAR` before `fnip` receives the text. And test with `-d` before running.
-
-`fnip -a bunhash` asks for the command. What you type is stored as-is, including `'` and `"`. A pipe does the same when stdin is not a terminal:
-
-```powershell
-@'
-bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
-'@ | fnip -a bunhash
-```
-
-```bash
-fnip -a bunhash <<'EOF'
-bun -e 'console.log(await Bun.password.hash("{{senha}}", { algorithm: "argon2id" }))'
-EOF
-```
-
-`fnip -s bunhash` prints the stored text. `fnip -d bunhash senha=sua-senha` shows the line that would run.
 
 ## Tab completion
 
 On the **first run** in an interactive terminal, `fnip` asks whether you want to enable completion. Answer `Y` and it writes a line to your shell's startup file. **Open a new terminal** and Tab works for flags, snippet names and template variables (`ver=`).
-
-Manual commands:
-
-```bash
-fnip --setup      # install (idempotent: running it again updates the same block)
-fnip --unsetup    # remove
-```
 
 `--setup` writes one block between `# >>> fnip >>>` and `# <<< fnip <<<`. Running it again replaces that block instead of appending a second copy:
 
